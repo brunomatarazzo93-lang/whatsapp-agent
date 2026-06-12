@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # Configurar Gemini
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
 # Sesiones en memoria (por número de teléfono)
 sessions = {}
