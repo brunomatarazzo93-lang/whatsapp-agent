@@ -10,10 +10,6 @@ app = Flask(__name__)
 
 # Configurar Gemini
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
-
-# Sesiones en memoria (por número de teléfono)
-sessions = {}
 
 # ===== PROMPT CONFIGURADO PARA LA INMOBILIARIA =====
 SYSTEM_PROMPT = """Eres un asesor inmobiliario argentino nativo, encargado de atender las consultas de WhatsApp para un departamento en alquiler en Lanús. 
@@ -42,25 +38,38 @@ REGLAS DE INTERACCIÓN:
 4. Respondé siempre en español rioplatense natural."""
 # ===================================================
 
+# Definimos el modelo inyectando las instrucciones del sistema de forma nativa
+model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    system_instruction=SYSTEM_PROMPT
+)
+
+# Sesiones en memoria (por número de teléfono)
+sessions = {}
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    incoming_msg = request.form.get("Body", "").strip()
-    from_number = request.form.get("From", "")
+    # Eliminamos posibles caracteres ocultos (non-breaking spaces) que suelen venir al copiar código
+    incoming_msg = request.form.get("Body", "").replace('\xa0', ' ').strip()
+    from_number = request.form.get("From", "").strip()
 
+    # Si el número no tiene sesión, se le inicia un chat limpio. 
+    # El modelo ya tiene el SYSTEM_PROMPT inyectado nativamente.
     if from_number not in sessions:
         sessions[from_number] = model.start_chat(history=[])
-        sessions[from_number].send_message(
-            f"[INSTRUCCIONES DEL SISTEMA - NO MOSTRAR AL USUARIO]: {SYSTEM_PROMPT}"
-        )
 
     chat = sessions[from_number]
 
     try:
-        response = chat.send_message(incoming_msg)
-        reply = response.text
+        # Si por alguna razón el mensaje llega completamente vacío, evitamos llamar a la API
+        if not incoming_msg:
+            reply = "¡Hola! ¿En qué te puedo ayudar con respecto al departamento en Lanús?"
+        else:
+            response = chat.send_message(incoming_msg)
+            reply = response.text
     except Exception as e:
         reply = "Disculpame, tuve un problema técnico en el sistema. ¿Me podrías volver a mandar el mensaje en unos minutos?"
-        print(f"Error Gemini: {e}")
+        print(f"Error detectado en Gemini: {e}")
 
     resp = MessagingResponse()
     resp.message(reply)
