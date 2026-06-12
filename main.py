@@ -40,7 +40,7 @@ REGLAS DE INTERACCIÓN:
 
 # Definimos el modelo inyectando las instrucciones del sistema de forma nativa
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-2.5-flash",
     system_instruction=SYSTEM_PROMPT
 )
 
