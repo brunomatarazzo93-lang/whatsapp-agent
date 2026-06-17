@@ -1,7 +1,37 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
+
+// =====================
+// PANEL QR (navegador)
+// =====================
+
+const server = express();
+let currentQR = null;
+let botReady = false;
+
+server.get('/', (req, res) => {
+    if (botReady) {
+        res.send('<h1>✅ Bot conectado y funcionando</h1>');
+    } else if (currentQR) {
+        res.send(`
+            <html>
+            <body style="display:flex;justify-content:center;align-items:center;height:100vh;background:#111;flex-direction:column">
+                <h2 style="color:white">Escaneá con tu WhatsApp Business</h2>
+                <img src="${currentQR}" style="width:400px;height:400px"/>
+            </body>
+            </html>
+        `);
+    } else {
+        res.send('<h1>⏳ Generando QR...</h1>');
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`🌐 Panel QR en puerto ${PORT}`));
 
 // =====================
 // CONFIGURACION
@@ -108,13 +138,16 @@ const client = new Client({
     }
 });
 
-// Mostrar QR en la terminal
-client.on('qr', (qr) => {
-    console.log('Escaneá este QR con tu WhatsApp Business:');
+// Mostrar QR en la terminal y en el panel web
+client.on('qr', async (qr) => {
+    currentQR = await QRCode.toDataURL(qr);
+    console.log('📱 QR generado — abrí la URL del servicio en el navegador para escanearlo');
     qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
+    botReady = true;
+    currentQR = null;
     console.log('Bot conectado y listo');
 });
 
