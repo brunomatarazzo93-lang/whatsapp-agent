@@ -101,9 +101,10 @@ const model = genAI.getGenerativeModel({
 // Cada chat tiene: { sesion: ChatSession, pausado: bool, pausadoHasta: timestamp }
 const chats = {};
 
-// IDs de los mensajes que mandó el propio bot, para no confundirlos con
-// intervención humana (whatsapp-web.js dispara message_create para ambos)
-const idsEnviadosPorBot = new Set();
+// Chats a los que el bot está enviando un mensaje en este momento, para no
+// confundirlo con intervención humana (whatsapp-web.js dispara message_create
+// también para los mensajes que manda el propio bot)
+const enviandoBot = new Set();
 
 function getChatState(chatId) {
     if (!chats[chatId]) {
@@ -167,8 +168,7 @@ client.on('message_create', async (msg) => {
     // Si el mensaje lo mandaste VOS desde el celular
     if (msg.fromMe) {
         // Ignorar los mensajes que mandó el propio bot (no son intervención humana)
-        if (idsEnviadosPorBot.has(msg.id._serialized)) {
-            idsEnviadosPorBot.delete(msg.id._serialized);
+        if (enviandoBot.has(msg.to)) {
             return;
         }
 
@@ -197,17 +197,18 @@ client.on('message_create', async (msg) => {
 
     // Responder con Gemini (sin citar el mensaje original, para que la
     // conversación fluya como un chat normal)
+    enviandoBot.add(chatId);
     try {
         const response = await state.sesion.sendMessage(msg.body);
         const reply = response.response.text();
 
-        const sent = await chat.sendMessage(reply);
-        idsEnviadosPorBot.add(sent.id._serialized);
+        await chat.sendMessage(reply);
         console.log(`${chatId}: ${msg.body} -> ${reply.substring(0, 50)}...`);
     } catch (error) {
-        const sent = await chat.sendMessage('Disculpame, tuve un problema técnico. ¿Me lo repetís?');
-        idsEnviadosPorBot.add(sent.id._serialized);
+        await chat.sendMessage('Disculpame, tuve un problema técnico. ¿Me lo repetís?');
         console.error('Error Gemini:', error);
+    } finally {
+        enviandoBot.delete(chatId);
     }
 });
 
