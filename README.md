@@ -1,56 +1,52 @@
-# Flask
-A minimal [Flask](https://flask.palletsprojects.com/) web application, served by [Gunicorn](https://docs.gunicorn.org/), and ready to deploy on [Railway](https://railway.app/?referralCode=alphasec) or Vercel.
+# WhatsApp Agent
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/igzwwg?referralCode=alphasec)
+Agente de WhatsApp para atención de consultas inmobiliarias, construido con [whatsapp-web.js](https://wwebjs.dev/) y [Gemini](https://ai.google.dev/).
 
-## Stack
- 
-- **[Flask](https://flask.palletsprojects.com/)** — Python web framework
-- **[Gunicorn](https://docs.gunicorn.org/)** — production WSGI server
-- **[Bootstrap 4](https://getbootstrap.com/docs/4.6/)** — frontend styling
- 
-## Project Structure
- 
+## Cómo funciona
+
 ```
-├── main.py              # App entry point and route definitions
-├── templates/
-│   └── index.html       # Jinja2 HTML template
-├── static/
-│   └── css/styles.css   # Custom styles
-├── requirements.txt     # Python dependencies
-├── Procfile             # Railway / Heroku process definition
-└── vercel.json          # Vercel deployment config
+Tu WhatsApp Business (celular)
+        +
+Bot vinculado por QR (como WhatsApp Web)
+        =
+Los dos ven los mismos chats
+
+Bot responde automáticamente
+Vos respondés desde el celular → bot se pausa solo para ese chat
 ```
- 
+
+## Advertencia importante
+
+`whatsapp-web.js` usa el protocolo de WhatsApp Web de forma no oficial. Meta no lo aprueba y hay riesgo (bajo pero real) de que te baneen el número si detectan uso automatizado intenso.
+
+## Estructura del proyecto
+
+```
+whatsapp-agent/
+├── index.js
+├── package.json
+├── .env
+└── .wwebjs_auth/    ← se crea solo al escanear QR
+```
+
+## Configuración
+
+Creá un archivo `.env` con:
+
+```
+GEMINI_API_KEY=tu_key
+```
+
 ## Run Locally
- 
+
 ```bash
-# Clone the repo
-git clone https://github.com/alphasecio/flask.git
-cd flask
- 
-# Install dependencies
-pip install -r requirements.txt
- 
-# Start the development server
-python main.py
+npm install
+npm start
 ```
- 
-The app will be available at `http://localhost:5000`.
- 
-## Deploy to Railway / Vercel
- 
-* **Railway** — click the button above, or follow the [step-by-step guide](https://alphasec.io/how-to-deploy-a-python-flask-app-on-railway/).
-* **Vercel** — `vercel.json` is included for zero-config deployment via the Vercel CLI or GitHub integration.
- 
-## Extending This Template
- 
-Add new routes in `main.py`:
- 
-```python
-@app.route('/about')
-def about():
-    return render_template('about.html')
-```
- 
-Add Python packages to `requirements.txt` and they'll be installed automatically on the next deploy.
+
+Escaneá el QR que aparece en la terminal con tu WhatsApp Business.
+
+## Comandos
+
+- Si vos respondés manualmente un chat desde el celular, el bot se pausa automáticamente para ese chat por 30 minutos.
+- Para reactivar el bot manualmente en un chat, mandá `/activar` desde tu celular en ese chat.

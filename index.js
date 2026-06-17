@@ -1,18 +1,13 @@
-import os
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
-import google.generativeai as genai
-from dotenv import load_dotenv
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+require('dotenv').config();
 
-load_dotenv()
+// =====================
+// CONFIGURACION
+// =====================
 
-app = Flask(__name__)
-
-# Configurar Gemini
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-
-# ===== PROMPT CONFIGURADO PARA LA INMOBILIARIA =====
-SYSTEM_PROMPT = """Eres argentino nativo, encargado de atender las consultas de WhatsApp para un departamento en alquiler en Lanús. 
+const SYSTEM_PROMPT = `Eres argentino nativo, encargado de atender las consultas de WhatsApp para un departamento en alquiler en Lanús.
 Tu tono debe ser atento, claro y natural (habla como un profesional argentino real, usando el "vos" de forma fluida y educada, sin modismos exagerados o artificiales).
 
 Tu objetivo es brindar la información de la propiedad de manera concisa y tratar de coordinar una visita si el interesado cumple con las condiciones básicas o muestra real interés.
@@ -38,7 +33,7 @@ INFORMACIÓN DETALLADA DE LA PROPIEDAD (Basada en la publicación MLA-1810493065
 - Requisitos para entrar: - Mes de alquiler + Mes de depósito + Garantía: Seguro de caución Finaer o similar (No es necesario tener garantia propiietaria, garantes). + Demostración de ingresos mayores a 2 alquileres.
 - El seguro de caución tiene un costo aproximado de $400.000 por año de contrato y se puede pagar en cuotas. Tenemos un productor que trabaja con todas las caucionadoras para que lo gestiones con el.
 - Ajustes por inflación cada 3 meses por IPC.
-- No tiene garage. 
+- No tiene garage.
 - EXPENSAS: ¡NO PAGA EXPENSAS! Este es un beneficio clave que tenés que destacar si te preguntan por los costos mensuales, ya que representa un ahorro enorme.
 - Superficie: 55 m² cubiertos.
 - Estado: Excelente estado de conservación, listo para ingresar.
@@ -54,52 +49,124 @@ REGLAS DE INTERACCIÓN:
 2. Si te preguntan si sigue disponible, deciles que sí y aprovecha para preguntarles qué uso le quieren dar (vivienda o comercial/profesional).
 3. Si la consulta es muy específica sobre requisitos contractuales avanzados (garantías específicas, meses de depósito, etc.) que no figuran acá, deciles amablemente que vas a consultar con el dueño/administración para confirmarlo y que los mantenés al tanto.
 4. Respondé siempre en español rioplatense natural. Con frases como "Hola, cómo estás?" "En qué puedo ayudarte?
-5. Si quiere agendar una visita al departamento decile que podría ser el próximo sábado, pedile un horario y decile que vas a confirmar la disponibilidad con el propietario"""
+5. Si quiere agendar una visita al departamento decile que podría ser el próximo sábado, pedile un horario y decile que vas a confirmar la disponibilidad con el propietario`;
 
+// Tiempo sin actividad para reactivar el bot después de intervención humana
+const PAUSA_HUMANO_MS = 30 * 60 * 1000; // 30 minutos
 
-# ===================================================
+// =====================
+// GEMINI
+// =====================
 
-# Definimos el modelo inyectando las instrucciones del sistema de forma nativa
-model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash",
-    system_instruction=SYSTEM_PROMPT
-)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    systemInstruction: SYSTEM_PROMPT
+});
 
-# Sesiones en memoria (por número de teléfono)
-sessions = {}
+// =====================
+// ESTADO POR CHAT
+// =====================
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    # Eliminamos posibles caracteres ocultos (non-breaking spaces) que suelen venir al copiar código
-    incoming_msg = request.form.get("Body", "").replace('\xa0', ' ').strip()
-    from_number = request.form.get("From", "").strip()
+// Cada chat tiene: { sesion: ChatSession, pausado: bool, pausadoHasta: timestamp }
+const chats = {};
 
-    # Si el número no tiene sesión, se le inicia un chat limpio. 
-    # El modelo ya tiene el SYSTEM_PROMPT inyectado nativamente.
-    if from_number not in sessions:
-        sessions[from_number] = model.start_chat(history=[])
+function getChatState(chatId) {
+    if (!chats[chatId]) {
+        chats[chatId] = {
+            sesion: model.startChat({ history: [] }),
+            pausado: false,
+            pausadoHasta: 0
+        };
+    }
 
-    chat = sessions[from_number]
+    // Si pasó el tiempo de pausa, reactivar
+    if (chats[chatId].pausado && Date.now() > chats[chatId].pausadoHasta) {
+        chats[chatId].pausado = false;
+        console.log(`Bot reactivado para ${chatId} (timeout)`);
+    }
 
-    try:
-        # Si por alguna razón el mensaje llega completamente vacío, evitamos llamar a la API
-        if not incoming_msg:
-            reply = "¡Hola! ¿En qué te puedo ayudar con respecto al departamento en Lanús?"
-        else:
-            response = chat.send_message(incoming_msg)
-            reply = response.text
-    except Exception as e:
-        reply = "Disculpame, tuve un problema técnico en el sistema. ¿Me podrías volver a mandar el mensaje en unos minutos?"
-        print(f"Error detectado en Gemini: {e}")
+    return chats[chatId];
+}
 
-    resp = MessagingResponse()
-    resp.message(reply)
-    return str(resp)
+function pausarBot(chatId) {
+    const state = getChatState(chatId);
+    state.pausado = true;
+    state.pausadoHasta = Date.now() + PAUSA_HUMANO_MS;
+    console.log(`Bot pausado para ${chatId} (intervención humana)`);
+}
 
-@app.route("/health", methods=["GET"])
-def health():
-    return {"status": "ok", "agent": "Inmobiliaria Lanus AI Agent"}, 200
+// =====================
+// WHATSAPP
+// =====================
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
+});
+
+// Mostrar QR en la terminal
+client.on('qr', (qr) => {
+    console.log('Escaneá este QR con tu WhatsApp Business:');
+    qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => {
+    console.log('Bot conectado y listo');
+});
+
+// =====================
+// LÓGICA PRINCIPAL
+// =====================
+
+client.on('message_create', async (msg) => {
+    // Ignorar mensajes de grupos
+    const chat = await msg.getChat();
+    if (chat.isGroup) return;
+
+    // Si el mensaje lo mandaste VOS desde el celular
+    if (msg.fromMe) {
+        // Comandos especiales
+        if (msg.body.toLowerCase() === '/activar') {
+            const state = getChatState(msg.to);
+            state.pausado = false;
+            console.log(`Bot reactivado manualmente para ${msg.to}`);
+            return;
+        }
+
+        // Cualquier otro mensaje tuyo → pausar bot para ese chat
+        pausarBot(msg.to);
+        return;
+    }
+
+    // Es un mensaje de un cliente
+    const chatId = msg.from;
+    const state = getChatState(chatId);
+
+    // Si el bot está pausado para este chat, no hacer nada
+    if (state.pausado) {
+        console.log(`Mensaje de ${chatId} ignorado (modo humano)`);
+        return;
+    }
+
+    // Responder con Gemini
+    try {
+        const response = await state.sesion.sendMessage(msg.body);
+        const reply = response.response.text();
+
+        await msg.reply(reply);
+        console.log(`${chatId}: ${msg.body} -> ${reply.substring(0, 50)}...`);
+    } catch (error) {
+        await msg.reply('Disculpame, tuve un problema técnico. ¿Me lo repetís?');
+        console.error('Error Gemini:', error);
+    }
+});
+
+client.on('disconnected', (reason) => {
+    console.log('Desconectado:', reason);
+});
+
+client.initialize();

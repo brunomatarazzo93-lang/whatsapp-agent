@@ -1,0 +1,16 @@
+{
+  "name": "whatsapp-agent",
+  "version": "1.0.0",
+  "description": "Agente de WhatsApp con Gemini para atencion de consultas inmobiliarias",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.5",
+    "puppeteer": "^23.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.1-alpha.3"
+  }
+}
