@@ -35,7 +35,10 @@ Creá un archivo `.env` con:
 
 ```
 GEMINI_API_KEY=tu_key
+PROMPT_AGENTE=el prompt completo del agente, en una sola línea
 ```
+
+`PROMPT_AGENTE` es el system prompt que define la personalidad y la información que maneja el agente. Si la variable no está definida, el bot no arranca.
 
 ## Run Locally
 
